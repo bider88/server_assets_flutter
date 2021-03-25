@@ -4,6 +4,7 @@ import 'package:archive/archive.dart';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:path_provider/path_provider.dart';
+import 'package:webview_flutter/webview_flutter.dart';
 
 const api =
     'https://firebasestorage.googleapis.com/v0/b/storage-serve.appspot.com/o/1609870595474-GIMBeta4ene.zip?alt=media&token=3799fa86-6a28-49e3-843d-79d548d0c5ab';
@@ -42,6 +43,7 @@ class _MyHomePageState extends State<MyHomePage> {
     nameZip = _getNameZip();
     name = _getNameWithoutZip();
     _downloadAssets();
+    print('_dir:::::::::::: $_dir');
     super.initState();
   }
 
@@ -51,6 +53,9 @@ class _MyHomePageState extends State<MyHomePage> {
       body: Center(
         child: filesNotDownloaded ? CircularProgressIndicator() :
         Text('Contenidos descargados...'),
+        // WebView(
+        //   initialUrl: _dir + '/index.html'
+        // ),
       ),
     );
   }
@@ -61,8 +66,12 @@ class _MyHomePageState extends State<MyHomePage> {
       _dir = (await getApplicationDocumentsDirectory()).path;
     }
 
+    print('_dir:::::::::::: $_dir');
+
     if (!await _hasToDownloadAssets(name, _dir)) {
-      filesNotDownloaded = false;
+      setState(() {
+        filesNotDownloaded = false;
+      });
       return;
     }
 
@@ -80,6 +89,9 @@ class _MyHomePageState extends State<MyHomePage> {
         await outFile.writeAsBytes(file.content);
       }
     }
+    setState(() {
+      filesNotDownloaded = false;
+    });
   }
 
   Future<bool> _hasToDownloadAssets(String name, String dir) async {
@@ -88,7 +100,9 @@ class _MyHomePageState extends State<MyHomePage> {
   }
 
   Future<File> _downloadFile(String url, String filename, String dir) async {
+    print('start _downloadFile>>>>>>>>>>>>>');
     var req = await http.Client().get(Uri.parse(url));
+    print('start _downloadFile>>>>>>>>>>>>>');
     var file = File('$dir/$filename');
     return file.writeAsBytes(req.bodyBytes);
   }
@@ -107,13 +121,5 @@ class _MyHomePageState extends State<MyHomePage> {
     return split[0];
   }
 
-  Widget _getImage(String name, String dir) {
-    // if (_theme != AppTheme.candy) {
-    //   var file = _getLocalImageFile(name, dir);
-    //   return Image.file(file);
-    // }
-    return Image.asset('assets/images/$name');
-  }
-
-  File _getLocalImageFile(String name, String dir) => File('$dir/$name');
+  File _getEntryPointFile(String dir) => File('$dir/index.html');
 }
