@@ -36,23 +36,64 @@ class _MyHomePageState extends State<MyHomePage> {
   String _dir;
   String nameZip;
   String name;
-  bool filesNotDownloaded = true;
+  bool filesNotDownloaded = false;
+  bool filesDownloading = false;
+
+  bool _loading = true;
+  HttpServer _server;
+  String _host = InternetAddress.loopbackIPv4.host;
+  final _port = 8100;
 
   @override
   void initState() {
     nameZip = _getNameZip();
     name = _getNameWithoutZip();
-    _downloadAssets();
-    print('_dir:::::::::::: $_dir');
+    _verifyContentIsDownloaded();
+    _startServer();
+    print('initState:: _dir:::::::::::: $_dir');
     super.initState();
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      appBar: AppBar(
+        centerTitle: true,
+        title: new Text('App'),
+      ),
       body: Center(
-        child: filesNotDownloaded ? CircularProgressIndicator() :
-        Text('Contenidos descargados...'),
+        child: Column(
+          children: [
+            ButtonBar(
+              alignment: MainAxisAlignment.center,
+              children: [
+                TextButton(
+                  onPressed: (filesDownloading || filesNotDownloaded) ? null : _downloadAssets,
+                  child: Text('Descargar contenido $filesDownloading $filesNotDownloaded')
+                ),
+                TextButton(
+                  onPressed: filesDownloading ? null : filesNotDownloaded ? _deleteAssets : null,
+                  child: Text('Eliminar contenido')
+                ),
+              ],
+            ),
+            filesDownloading ? LinearProgressIndicator() :
+            filesNotDownloaded ? Text('Contenido descargado...') : Text('En espera de descarga de contenido...'),
+            Container(
+              width: double.infinity,
+              height: 400,
+              child: _loading ?
+              Center(
+                child: CircularProgressIndicator(),
+              )
+              : filesNotDownloaded ?
+              WebView(
+                initialUrl: 'http://127.0.0.1:$_port/',
+                javascriptMode: JavascriptMode.unrestricted
+              ) : Text(''),
+            )
+          ],
+        ),
         // WebView(
         //   initialUrl: _dir + '/index.html'
         // ),
@@ -61,16 +102,16 @@ class _MyHomePageState extends State<MyHomePage> {
   }
 
   Future<void> _downloadAssets() async {
+    setState(() => filesDownloading = true );
     print('_downloadAssets>>>>>>>>>>>>>');
-    if (_dir == null) {
-      _dir = (await getApplicationDocumentsDirectory()).path;
-    }
+    await _checkDirectory();
 
     print('_dir:::::::::::: $_dir');
 
     if (!await _hasToDownloadAssets(name, _dir)) {
       setState(() {
         filesNotDownloaded = false;
+        filesDownloading = false;
       });
       return;
     }
@@ -90,8 +131,31 @@ class _MyHomePageState extends State<MyHomePage> {
       }
     }
     setState(() {
-      filesNotDownloaded = false;
+      filesNotDownloaded = true;
+      filesDownloading = false;
     });
+  }
+
+  Future<void> _deleteAssets() async {
+    print('_deleteAssets>>>>>>>>>>>>>');
+    await _checkDirectory();
+
+    print('_dir:::::::::::: $_dir');
+
+    if (!await _hasToDownloadAssets(name, _dir)) {
+      setState(() => filesDownloading = true );
+      print('_deleting Assets>>>>>>>>>>>>>');
+      final dir = Directory(_dir);
+      dir.deleteSync(recursive: true);
+      setState(() {
+        filesNotDownloaded = false;
+        filesDownloading = false;
+      });
+      print('_delete all Assets>>>>>>>>>>>>>');
+      return;
+    }
+    print('do anything>>>>>>>>>>>>>');
+    return;
   }
 
   Future<bool> _hasToDownloadAssets(String name, String dir) async {
@@ -121,5 +185,49 @@ class _MyHomePageState extends State<MyHomePage> {
     return split[0];
   }
 
-  File _getEntryPointFile(String dir) => File('$dir/index.html');
+  Future<void> _verifyContentIsDownloaded() async {
+    await _checkDirectory();
+    filesNotDownloaded = !await _hasToDownloadAssets(name, _dir);
+    setState(() => {});
+  }
+
+  File _getEntryPointFile() => File('$_dir/index.html');
+
+
+  Future<void> _checkDirectory() async {
+    if (_dir == null) {
+      _dir = (await getApplicationDocumentsDirectory()).path;
+    }
+  }
+
+  _startServer() async {
+
+    await _checkDirectory();
+
+    File targetFile = _getEntryPointFile();
+
+    _server = await HttpServer.bind(_host, _port);
+    print(
+      '1. Server running on IP : ' +
+      _server.address.toString() +
+      ' On Port : ' + _server.port.toString()
+    );
+    setState(() => _loading = false);
+    await for (HttpRequest request in _server) {
+      if (await targetFile.exists()) {
+        print("Serving ${targetFile.path}.");
+        request.response.headers.contentType = ContentType.html;
+        try {
+          await request.response.addStream(targetFile.openRead());
+        } catch (e) {
+          print("Couldn't read file: $e");
+          exit(-1);
+        }
+      } else {
+        print("Can't open ${targetFile.path}.");
+        request.response.statusCode = HttpStatus.notFound;
+      }
+      await request.response.close();
+    }
+  }
 }

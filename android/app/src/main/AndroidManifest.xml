@@ -2,6 +2,7 @@
     package="com.example.server_assets">
    <application
         android:label="server_assets"
+        android:usesCleartextTraffic="true"
         android:icon="@mipmap/ic_launcher">
         <activity
             android:name=".MainActivity"
